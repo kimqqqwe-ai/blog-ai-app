@@ -25,7 +25,7 @@ if st.button("AI 콘텐츠 생성하기", type="primary"):
     else:
         try:
             genai.configure(api_key=gemini_api_key)
-            model = genai.GenerativeModel('gemini-2.0-flash')
+            model = genai.GenerativeModel('gemini-3.8-flash')
             
             col1, col2 = st.columns([2, 1])
             
