@@ -90,7 +90,7 @@ if st.button("AI 콘텐츠 생성하기", type="primary"):
             )
 
             today = datetime.now().strftime("%Y-%m-%d")
-            status.write("1/3 최신 웹 정보 검색 중...")
+            status.write("1/3 최신 웹 정보 검색 중... (Gemini 3.8 Flash 1회만 사용)")
 
             research_prompt = f"""
 오늘 날짜는 {today}입니다.
@@ -129,7 +129,7 @@ if st.button("AI 콘텐츠 생성하기", type="primary"):
                     "event_date": "확인 불가",
                 }
 
-            status.write("2/3 확인된 최신 사실로 블로그 작성 중...")
+            status.write("2/3 확인된 최신 사실로 블로그 작성 중... (Flash Lite 사용)")
             writing_prompt = f"""
 오늘 날짜: {today}
 사용자 키워드: {keyword}
@@ -154,15 +154,30 @@ if st.button("AI 콘텐츠 생성하기", type="primary"):
   "thumbnail_prompt": "본문의 실제 사건을 시각화하는 구체적인 영어 이미지 프롬프트. 축구라면 football stadium, Korean national team celebration, gold medal 등 실제 주제 요소를 반드시 포함. 특정 실존 인물 얼굴 복제는 요구하지 말 것."
 }}
 """
-            written = client.models.generate_content(
-                model="gemini-3.8-flash",
-                contents=writing_prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.35,
-                    max_output_tokens=3000,
-                    response_mime_type="application/json",
-                ),
-            )
+            # 3.8은 검색에만 1회 사용하고, 글쓰기는 한도가 넉넉한 Flash Lite로 분리
+            writing_models = ["gemini-3.5-flash-lite", "gemini-2.5-flash-lite"]
+            written = None
+            writing_error = None
+            for writing_model in writing_models:
+                try:
+                    written = client.models.generate_content(
+                        model=writing_model,
+                        contents=writing_prompt,
+                        config=types.GenerateContentConfig(
+                            temperature=0.35,
+                            max_output_tokens=2400,
+                            response_mime_type="application/json",
+                        ),
+                    )
+                    status.write(f"글 작성 모델: {writing_model}")
+                    break
+                except Exception as e:
+                    writing_error = e
+                    if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                        continue
+                    raise
+            if written is None:
+                raise RuntimeError(f"글쓰기 모델 사용량 제한에 걸렸습니다: {writing_error}")
             data = extract_json(written.text or "{}")
 
             title = data.get("title", keyword)
