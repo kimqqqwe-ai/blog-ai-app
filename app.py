@@ -90,7 +90,7 @@ if st.button("AI 콘텐츠 생성하기", type="primary"):
             )
 
             today = datetime.now().strftime("%Y-%m-%d")
-            status.write("1/3 최신 웹 정보 검색 중... (Gemini 3.8 Flash 1회만 사용)")
+            status.write("1/3 최신 웹 정보 검색 중... (Flash Lite 사용)")
 
             research_prompt = f"""
 오늘 날짜는 {today}입니다.
@@ -110,7 +110,7 @@ if st.button("AI 콘텐츠 생성하기", type="primary"):
 }}
 """
             research = client.models.generate_content(
-                model="gemini-3.8-flash",
+                model="gemini-3.5-flash-lite",
                 contents=research_prompt,
                 config=types.GenerateContentConfig(
                     tools=[types.Tool(google_search=types.GoogleSearch())],
@@ -154,8 +154,8 @@ if st.button("AI 콘텐츠 생성하기", type="primary"):
   "thumbnail_prompt": "본문의 실제 사건을 시각화하는 구체적인 영어 이미지 프롬프트. 축구라면 football stadium, Korean national team celebration, gold medal 등 실제 주제 요소를 반드시 포함. 특정 실존 인물 얼굴 복제는 요구하지 말 것."
 }}
 """
-            # 3.8은 검색에만 1회 사용하고, 글쓰기는 한도가 넉넉한 Flash Lite로 분리
-            writing_models = ["gemini-3.5-flash-lite", "gemini-2.5-flash-lite"]
+            # 검색과 글쓰기를 모두 Flash Lite로 통일해 3.8의 낮은 RPM/RPD 한도를 피함
+            writing_models = ["gemini-3.5-flash-lite"]
             written = None
             writing_error = None
             for writing_model in writing_models:
