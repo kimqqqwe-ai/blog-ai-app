@@ -27,7 +27,7 @@ if st.button("AI 콘텐츠 생성하기", type="primary"):
 
             client = genai.Client(
                 api_key=gemini_api_key,
-                http_options=types.HttpOptions(timeout=60000),
+                http_options=types.HttpOptions(timeout=120000),
             )
 
             prompt = f"""
@@ -88,6 +88,9 @@ FAQ JSON-LD
                         or "high demand" in error_text.lower()
                         or "429" in error_text
                         or "RESOURCE_EXHAUSTED" in error_text
+                        or "timed out" in error_text.lower()
+                        or "timeout" in error_text.lower()
+                        or "read operation" in error_text.lower()
                     ):
                         status.write(f"{model_name} 혼잡 → 다음 모델로 자동 전환")
                         continue
