@@ -56,11 +56,50 @@ if st.button("AI 콘텐츠 생성하기", type="primary"):
 FAQ JSON-LD
 """
 
-            response = client.models.generate_content(
-                model="gemini-3.8-flash",
-                contents=prompt,
-            )
+            # 3.8을 우선 사용하고, 서버 과부하(503) 시 안정적인 Flash 모델로 자동 전환
+            models_to_try = [
+                "gemini-3.8-flash",
+                "gemini-3.7-flash",
+                "gemini-3.6-flash",
+                "gemini-3.5-flash",
+                "gemini-3.5-flash-lite",
+            ]
 
+            response = None
+            last_error = None
+            used_model = None
+
+            for model_name in models_to_try:
+                try:
+                    status.write(f"요청 중: {model_name}")
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                    )
+                    used_model = model_name
+                    break
+                except Exception as model_error:
+                    last_error = model_error
+                    error_text = str(model_error)
+                    # 503/429/5xx 등 일시적인 서버 혼잡은 다음 모델로 자동 전환
+                    if (
+                        "503" in error_text
+                        or "UNAVAILABLE" in error_text
+                        or "high demand" in error_text.lower()
+                        or "429" in error_text
+                        or "RESOURCE_EXHAUSTED" in error_text
+                    ):
+                        status.write(f"{model_name} 혼잡 → 다음 모델로 자동 전환")
+                        continue
+                    raise
+
+            if response is None:
+                raise RuntimeError(
+                    "현재 Gemini Flash 모델들이 모두 혼잡합니다. 잠시 후 다시 시도해주세요. "
+                    f"마지막 오류: {last_error}"
+                )
+
+            status.write(f"성공 모델: {used_model}")
             result = response.text or ""
             if "===BLOG===" not in result or "===SCHEMA===" not in result:
                 raise ValueError("Gemini 응답 형식이 예상과 다릅니다. 다시 시도해주세요.")
