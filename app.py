@@ -1,20 +1,18 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import urllib.parse
 
-# Page config
 st.set_page_config(page_title="AI 블로그 포스팅 & 썸네일 생성기", layout="wide")
 
 st.title("🚀 AI 자동 블로그 글 & 썸네일 생성기")
 st.caption("키워드만 입력하면 블로그 본문, 검색 노출용 FAQ 스키마, 썸네일을 한 번에 만들어줍니다.")
 
-# 사이드바 API 키 입력
 with st.sidebar:
     st.header("🔑 설정")
     gemini_api_key = st.text_input("Gemini API Key를 입력하세요", type="password")
     st.markdown("[Google AI Studio에서 무료 API Key 받기](https://aistudio.google.com/)")
 
-# 메인 입력창
 keyword = st.text_input("주제 키워드 입력", placeholder="예: 김무열 참교육")
 
 if st.button("AI 콘텐츠 생성하기", type="primary"):
@@ -24,37 +22,79 @@ if st.button("AI 콘텐츠 생성하기", type="primary"):
         st.warning("키워드를 입력해주세요!")
     else:
         try:
-            genai.configure(api_key=gemini_api_key)
-            model = genai.GenerativeModel('gemini-3.8-flash')
-            
+            status = st.status("AI 콘텐츠 생성을 시작합니다...", expanded=True)
+            status.write("1/3 Gemini 3.8 Flash 연결 및 블로그·FAQ 생성 중...")
+
+            client = genai.Client(
+                api_key=gemini_api_key,
+                http_options=types.HttpOptions(timeout=60000),
+            )
+
+            prompt = f"""
+키워드: {keyword}
+
+아래 두 결과를 한 번에 작성해주세요.
+
+[블로그 본문]
+- 검색 사용자의 궁금증을 바로 해결하는 제목
+- 자연스러운 서론
+- 소제목이 있는 충분히 자세한 본문
+- 핵심 요약과 결론
+- 과장되거나 확인되지 않은 사실은 단정하지 말 것
+- 한국어로 작성
+
+[FAQ 스키마]
+- 위 주제와 직접 관련된 FAQ 5개
+- 완전한 <script type="application/ld+json">...</script> 형식
+- Schema.org FAQPage 규격 사용
+
+반드시 아래 구분자를 정확히 사용하세요.
+
+===BLOG===
+블로그 본문
+===SCHEMA===
+FAQ JSON-LD
+"""
+
+            response = client.models.generate_content(
+                model="gemini-3.8-flash",
+                contents=prompt,
+            )
+
+            result = response.text or ""
+            if "===BLOG===" not in result or "===SCHEMA===" not in result:
+                raise ValueError("Gemini 응답 형식이 예상과 다릅니다. 다시 시도해주세요.")
+
+            blog_part = result.split("===BLOG===", 1)[1].split("===SCHEMA===", 1)[0].strip()
+            schema_part = result.split("===SCHEMA===", 1)[1].strip()
+
+            status.write("2/3 블로그 본문과 FAQ 생성 완료")
+            status.write("3/3 썸네일 주소 생성 완료")
+            status.update(label="콘텐츠 생성 완료", state="complete", expanded=False)
+
             col1, col2 = st.columns([2, 1])
-            
+
             with col1:
-                with st.spinner("AI가 블로그 글과 스키마 마크업을 작성하고 있습니다..."):
-                    # 1. 블로그 본문 생성
-                    prompt_text = f"키워드 '{keyword}'에 대한 블로그 포스팅을 작성해줘. 제목, 서론, 본문(소제목 포함), 결론으로 전문적이고 흥미롭게 써줘."
-                    res_text = model.generate_content(prompt_text)
-                    
-                    # 2. FAQ 스키마 생성
-                    prompt_schema = f"키워드 '{keyword}' 관련 FAQ JSON-LD 스키마 마크업(<script type='application/ld+json'>)을 완성된 형태로 작성해줘."
-                    res_schema = model.generate_content(prompt_schema)
-                
                 st.subheader("📝 생성된 블로그 글")
-                st.write(res_text.text)
-                
+                st.markdown(blog_part)
+
                 st.subheader("⚙️ FAQ 스키마 마크업 (HTML용)")
-                st.code(res_schema.text, language="html")
+                st.code(schema_part, language="html")
 
             with col2:
-                with st.spinner("AI가 썸네일 이미지를 생성하고 있습니다..."):
-                    # 3. 무료 썸네일 URL 생성
-                    prompt_img = f"dramatic blog thumbnail for {keyword}, poster style, high quality"
-                    encoded_prompt = urllib.parse.quote(prompt_img)
-                    img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
-                
+                prompt_img = f"dramatic professional blog thumbnail for {keyword}, poster style, high quality, no text"
+                encoded_prompt = urllib.parse.quote(prompt_img)
+                img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
+
                 st.subheader("🖼️ 생성된 썸네일")
-                st.image(img_url, use_column_width=True)
-                st.markdown(f"[이미지 다운로드 링크]({img_url})")
+                st.image(img_url, use_container_width=True)
+                st.markdown(f"[이미지 열기]({img_url})")
 
         except Exception as e:
-            st.error(f"오류가 발생했습니다: {e}")
+            try:
+                status.update(label="생성 실패", state="error", expanded=True)
+            except Exception:
+                pass
+            st.error("콘텐츠 생성 중 오류가 발생했습니다.")
+            st.code(str(e))
+            st.info("오류 내용을 그대로 보내주시면 바로 다음 수정에 반영할 수 있습니다.")
